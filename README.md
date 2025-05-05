@@ -17,7 +17,7 @@ e.g. `CLOUDFLARE_GLOBAL_KEY="77739439023dkkls89858ed"`
 ### CLOUDFLARE_EMAIL
 The email address you use with cloudflare.
 
-e.g `CLOUDFLARE_EMAIL=somebody@gmail.com`
+e.g `CLOUDFLARE_EMAIL=somebody@gmail.com`py
 
 ### Example .env
 ``` 
