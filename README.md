@@ -1,6 +1,12 @@
 # Dynamic DNS Updater
 This project uses python libraries for tp-link routers and cloudflare to periodically update my self hosted websites with my latest WAN ip address.
 
+## Hack
+comment out proxies in line:
+
+  File "C:\dev\dynamic-dns-updater\venv\lib\site-packages\cloudflare\_base_client.py", line 845, in __init__
+
+
 # Setup
 ## .env file
 create a .env file in the project's root directory, with the following entries
