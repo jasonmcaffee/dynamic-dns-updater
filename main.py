@@ -23,9 +23,13 @@ def main():
     tplink_router = TPLinkRouter(logging, tplink_router_password)
 
     # perform the update
-    zone_and_record_names = [
-        'jasonmcaffee.com',
-        'yogajhana.com'
+    # Format: (zone_name, record_name)
+    # For root domains: zone_name = record_name
+    # For subdomains: zone_name = root domain, record_name = full subdomain
+    zone_and_record_configs = [
+        ('jasonmcaffee.com', 'jasonmcaffee.com'),  # Root domain
+        ('jasonmcaffee.com', 'ai.jasonmcaffee.com'),  # AI subdomain
+        ('yogajhana.com', 'yogajhana.com')  # Root domain
     ]
 
     def get_ip_address_and_perform_dns_update_if_needed():
@@ -35,7 +39,7 @@ def main():
             logging.error('unable to update dns records due to no wan ip address found')
             return
         logging.info(f'setting new ip to {new_ip}...')
-        cloudflare_updater.update_dns_records(new_ip, zone_and_record_names)
+        cloudflare_updater.update_dns_records(new_ip, zone_and_record_configs)
 
     get_ip_address_and_perform_dns_update_if_needed()
 

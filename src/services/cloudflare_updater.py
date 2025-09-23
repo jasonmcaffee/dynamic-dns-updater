@@ -8,17 +8,20 @@ class CloudflareUpdater:
         self.cloudflare_api_global_key = cloudflare_api_global_key
         self.cloudflare_email = cloudflare_email
 
-    def update_dns_records(self, new_ip, zone_and_record_names):
-
-        # assume that the zone and record name are the same.
-        # zone_and_record_names = [
-        #     'jasonmcaffee.com',
-        #     'yogajhana.com'
-        # ]
+    def update_dns_records(self, new_ip, zone_and_record_configs):
+        """
+        Update DNS records for multiple zones and records.
+        
+        Args:
+            new_ip: The new IP address to set
+            zone_and_record_configs: List of tuples (zone_name, record_name)
+                - zone_name: The Cloudflare zone name (e.g., 'jasonmcaffee.com')
+                - record_name: The DNS record name (e.g., 'ai.jasonmcaffee.com' for subdomains)
+        """
         cloudflare_client = Cloudflare(api_key=self.cloudflare_api_global_key, api_email=self.cloudflare_email)
 
-        for zone_and_record_name in zone_and_record_names:
-            self.update_dns_record(cloudflare_client, zone_and_record_name, zone_and_record_name, new_ip)
+        for zone_name, record_name in zone_and_record_configs:
+            self.update_dns_record(cloudflare_client, zone_name, record_name, new_ip)
 
     def update_dns_record(self, cf, zone_name, record_name, new_ip):
         try:
