@@ -1,4 +1,4 @@
-cd C:\shared-drive\dev\dynamic-dns-updater
-call venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
+cd C:\jason\dev\dynamic-dns-updater
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe main.py
+pause
