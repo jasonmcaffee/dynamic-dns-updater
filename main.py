@@ -29,6 +29,8 @@ def main():
     zone_and_record_configs = [
         ('jasonmcaffee.com', 'jasonmcaffee.com'),  # Root domain
         ('jasonmcaffee.com', 'ai.jasonmcaffee.com'),  # AI subdomain
+        ('jasonmcaffee.com', 'media.jasonmcaffee.com'),  # Media subdomain
+        ('jasonmcaffee.com', 'media-backend.jasonmcaffee.com'),  # Media backend subdomain
         ('yogajhana.com', 'yogajhana.com')  # Root domain
     ]
 
