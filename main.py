@@ -31,7 +31,10 @@ def main():
         ('jasonmcaffee.com', 'ai.jasonmcaffee.com'),  # AI subdomain
         ('jasonmcaffee.com', 'media.jasonmcaffee.com'),  # Media subdomain
         ('jasonmcaffee.com', 'media-backend.jasonmcaffee.com'),  # Media backend subdomain
-        ('yogajhana.com', 'yogajhana.com')  # Root domain
+        ('yogajhana.com', 'yogajhana.com'),  # Root domain
+        ('chordical.com', 'chordical.com'),  # Root domain
+        ('chordical.com', 'www.chordical.com'),  # Marketing UI
+        ('chordical.com', 'api.chordical.com'),  # Community API (chordical-server)
     ]
 
     def get_ip_address_and_perform_dns_update_if_needed():
