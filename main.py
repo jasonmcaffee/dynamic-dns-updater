@@ -32,6 +32,7 @@ def main():
         ('jasonmcaffee.com', 'media.jasonmcaffee.com'),  # Media subdomain
         ('jasonmcaffee.com', 'media-backend.jasonmcaffee.com'),  # Media backend subdomain
         ('jasonmcaffee.com', 'git.jasonmcaffee.com'),  # Local GitHub (Gitea) subdomain
+        ('jasonmcaffee.com', 'phone.jasonmcaffee.com'),  # Phone Sync photo/video backup subdomain
         ('yogajhana.com', 'yogajhana.com'),  # Root domain
         ('chordical.com', 'chordical.com'),  # Root domain
         ('chordical.com', 'www.chordical.com'),  # Marketing UI
