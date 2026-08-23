@@ -1,51 +1,64 @@
 # Dynamic DNS Updater
-This project uses python libraries for tp-link routers and cloudflare to periodically update my self hosted websites with my latest WAN ip address.
 
-## Hack
-comment out proxies in line:
+A small Rust daemon that reads the WAN IPv4 address from a TP-Link router and keeps the configured Cloudflare A records synchronized. It runs one reconciliation immediately, then repeats every five minutes.
 
-  File "C:\dev\dynamic-dns-updater\venv\lib\site-packages\cloudflare\_base_client.py", line 845, in __init__
+The prior Python implementation remains in this repository as a rollback path. Production uses the Rust release executable and does not install dependencies at service startup.
 
+## Configuration
 
-# Setup
-## .env file
-create a .env file in the project's root directory, with the following entries
-### TP_LINK_ROUTER_PASSWORD=2x2lcallingcq
-The password you use to log into your tp link router
+Create a gitignored `.env` in the project root:
 
-e.g. `TP_LINK_ROUTER_PASSWORD=password`
-
-### CLOUDFLARE_GLOBAL_KEY
-The global key (not access token) from cloudflare.
-
-e.g. `CLOUDFLARE_GLOBAL_KEY="77739439023dkkls89858ed"`
-
-### CLOUDFLARE_EMAIL
-The email address you use with cloudflare.
-
-e.g `CLOUDFLARE_EMAIL=somebody@gmail.com`py
-
-### Example .env
-``` 
-TP_LINK_ROUTER_PASSWORD=password
-CLOUDFLARE_GLOBAL_KEY="12345ad"
-CLOUDFLARE_EMAIL=somebody@gmail.com
+```dotenv
+TP_LINK_ROUTER_PASSWORD=router-password
+CLOUDFLARE_GLOBAL_KEY=global-api-key
+CLOUDFLARE_EMAIL=somebody@example.com
 ```
 
-# Run
+Cloudflare recommends a scoped API token. When `CLOUDFLARE_API_TOKEN` is present, it takes precedence and the global key/email are not required:
 
-## Windows
-``` 
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
+```dotenv
+TP_LINK_ROUTER_PASSWORD=router-password
+CLOUDFLARE_API_TOKEN=scoped-dns-token
 ```
 
-## Linux & Mac
+Optional settings:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TP_LINK_ROUTER_HOST` | `http://192.168.0.1` | TP-Link router origin |
+| `CLOUDFLARE_API_BASE_URL` | `https://api.cloudflare.com/client/v4` | Cloudflare API origin or integration fixture |
+| `DYNAMIC_DNS_INTERVAL_SECONDS` | `300` | Daemon reconciliation interval |
+| `DYNAMIC_DNS_HTTP_TIMEOUT_SECONDS` | `30` | Per-request timeout |
+
+Secrets are read from the environment, marked sensitive in HTTP headers, and never written to logs.
+
+## Build and run
+
+```powershell
+cargo build --release
+target\release\dynamic-dns-updater.exe --once
+target\release\dynamic-dns-updater.exe
 ```
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python main.py
+
+`--once` performs one complete cycle and returns a nonzero exit status if the router read or any record fails. The default daemon mode continues after a failed cycle and tries again at the next interval.
+
+On this machine, use the Service Manager at `http://localhost:4000` to start, stop, or restart the registered Dynamic DNS Updater. `run-dynamic-dns-updater-rust.cmd` is the direct Rust launcher used by operational tooling.
+
+## Test
+
+```powershell
+cargo test
 ```
+
+The focused suite covers configuration, TP-Link cryptography, Cloudflare HTTP contracts/retries, reconciliation decisions, zone caching, and scheduler shutdown behavior.
+
+## Python rollback
+
+The previous implementation is retained unchanged:
+
+```powershell
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe main.py
+```
+
+`run-dynamic-dns-updater.cmd` remains the Python launcher. Rolling back production only requires restoring that command in Service Manager and restarting the same registered service.
