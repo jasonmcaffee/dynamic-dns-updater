@@ -2,7 +2,7 @@
 
 A small Rust daemon that reads the WAN IPv4 address from a TP-Link router and keeps the configured Cloudflare A records synchronized. It runs one reconciliation immediately, then repeats every five minutes.
 
-The prior Python implementation remains in this repository as a rollback path. Production uses the Rust release executable and does not install dependencies at service startup.
+Production uses the Rust release executable and does not install runtime dependencies at service startup. The obsolete Python implementation was removed after the Rust service completed production verification.
 
 ## Configuration
 
@@ -51,14 +51,3 @@ cargo test
 ```
 
 The focused suite covers configuration, TP-Link cryptography, Cloudflare HTTP contracts/retries, reconciliation decisions, zone caching, and scheduler shutdown behavior.
-
-## Python rollback
-
-The previous implementation is retained unchanged:
-
-```powershell
-venv\Scripts\python.exe -m pip install -r requirements.txt
-venv\Scripts\python.exe main.py
-```
-
-`run-dynamic-dns-updater.cmd` remains the Python launcher. Rolling back production only requires restoring that command in Service Manager and restarting the same registered service.
