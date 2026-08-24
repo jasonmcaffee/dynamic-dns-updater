@@ -19,6 +19,8 @@ pub struct DnsRecord {
     pub id: String,
     pub name: String,
     pub content: Ipv4Addr,
+    pub proxied: bool,
+    pub ttl: u32,
 }
 
 pub trait DnsProvider {
@@ -28,14 +30,8 @@ pub trait DnsProvider {
     fn find_a_record(&self, zone_id: &str, record_name: &str) -> Result<Option<DnsRecord>>;
     /// Creates a proxied A record with automatic TTL.
     fn create_a_record(&self, zone_id: &str, record_name: &str, content: Ipv4Addr) -> Result<()>;
-    /// Replaces an existing record with the desired proxied A-record representation.
-    fn update_a_record(
-        &self,
-        zone_id: &str,
-        record_id: &str,
-        record_name: &str,
-        content: Ipv4Addr,
-    ) -> Result<()>;
+    /// Repoints an existing record while preserving its current proxy state and TTL.
+    fn update_a_record(&self, zone_id: &str, existing: &DnsRecord, content: Ipv4Addr) -> Result<()>;
 }
 
 pub struct CloudflareClient {
@@ -134,23 +130,20 @@ impl DnsProvider for CloudflareClient {
     /// Creates a missing proxied A record while retaining Cloudflare automatic TTL.
     fn create_a_record(&self, zone_id: &str, record_name: &str, content: Ipv4Addr) -> Result<()> {
         let url = format!("{}/zones/{zone_id}/dns_records", self.base_url);
-        let body = RecordWrite::new(record_name, content);
+        let body = RecordWrite::created(record_name, content);
         let _: RecordResult = self.execute("creating Cloudflare DNS record", || {
             self.client.post(&url).json(&body)
         })?;
         Ok(())
     }
 
-    /// Updates an existing record by identifier with the complete desired A-record representation.
-    fn update_a_record(
-        &self,
-        zone_id: &str,
-        record_id: &str,
-        record_name: &str,
-        content: Ipv4Addr,
-    ) -> Result<()> {
-        let url = format!("{}/zones/{zone_id}/dns_records/{record_id}", self.base_url);
-        let body = RecordWrite::new(record_name, content);
+    /// Updates an existing record by identifier, echoing back its own proxy state and TTL.
+    fn update_a_record(&self, zone_id: &str, existing: &DnsRecord, content: Ipv4Addr) -> Result<()> {
+        let url = format!(
+            "{}/zones/{zone_id}/dns_records/{}",
+            self.base_url, existing.id
+        );
+        let body = RecordWrite::updated(existing, content);
         let _: RecordResult = self.execute("updating Cloudflare DNS record", || {
             self.client.put(&url).json(&body)
         })?;
@@ -187,6 +180,15 @@ struct RecordResult {
     content: String,
     #[serde(rename = "type")]
     record_type: String,
+    #[serde(default)]
+    proxied: bool,
+    #[serde(default = "automatic_ttl")]
+    ttl: u32,
+}
+
+/// Returns Cloudflare's automatic-TTL sentinel, used when a response omits the field entirely.
+fn automatic_ttl() -> u32 {
+    1
 }
 
 #[derive(Serialize)]
@@ -200,14 +202,25 @@ struct RecordWrite<'a> {
 }
 
 impl RecordWrite<'_> {
-    /// Creates the canonical representation used for both create and update operations.
-    fn new(record_name: &str, content: Ipv4Addr) -> RecordWrite<'_> {
+    /// Builds the payload for a brand-new record: proxied, with Cloudflare automatic TTL.
+    fn created(record_name: &str, content: Ipv4Addr) -> RecordWrite<'_> {
         RecordWrite {
             name: record_name,
             record_type: "A",
             content: content.to_string(),
             proxied: true,
             ttl: 1,
+        }
+    }
+
+    /// Builds the payload for an existing record so a reconciliation only ever changes its address.
+    fn updated(existing: &DnsRecord, content: Ipv4Addr) -> RecordWrite<'_> {
+        RecordWrite {
+            name: &existing.name,
+            record_type: "A",
+            content: content.to_string(),
+            proxied: existing.proxied,
+            ttl: existing.ttl,
         }
     }
 }
@@ -227,6 +240,8 @@ impl TryFrom<&RecordResult> for DnsRecord {
             id: value.id.clone(),
             name: value.name.clone(),
             content,
+            proxied: value.proxied,
+            ttl: value.ttl,
         })
     }
 }
@@ -366,7 +381,7 @@ mod tests {
             ),
             (
                 200,
-                r#"{"success":true,"errors":[],"result":[{"id":"record-1","name":"www.example.com","content":"203.0.113.8","type":"A"}]}"#,
+                r#"{"success":true,"errors":[],"result":[{"id":"record-1","name":"www.example.com","content":"203.0.113.8","type":"A","proxied":true,"ttl":1}]}"#,
             ),
         ]);
         let client = fixture_client(base_url);
@@ -376,32 +391,63 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(record.content, Ipv4Addr::new(203, 0, 113, 8));
+        assert!(record.proxied);
+        assert_eq!(record.ttl, 1);
         let observed = handle.join().unwrap();
         assert!(observed[0].contains("/zones?name=example.com"));
         assert!(observed[1].contains("type=A&name=www.example.com"));
     }
 
-    /// Verifies create/update payloads preserve proxied A records with automatic TTL.
+    /// Builds one existing-record fixture with the supplied Cloudflare proxy state and TTL.
+    fn existing_record(proxied: bool, ttl: u32) -> DnsRecord {
+        DnsRecord {
+            id: "record-1".into(),
+            name: "www.example.com".into(),
+            content: Ipv4Addr::new(198, 51, 100, 4),
+            proxied,
+            ttl,
+        }
+    }
+
+    /// Verifies a brand-new record is created proxied with Cloudflare automatic TTL.
     #[test]
-    fn writes_canonical_a_record_payloads() {
-        let response = r#"{"success":true,"errors":[],"result":{"id":"record-1","name":"www.example.com","content":"203.0.113.9","type":"A"}}"#;
+    fn creates_new_records_proxied_with_automatic_ttl() {
+        let response = r#"{"success":true,"errors":[],"result":{"id":"record-1","name":"www.example.com","content":"203.0.113.9","type":"A","proxied":true,"ttl":1}}"#;
+        let (base_url, handle) = spawn_fixture(vec![(200, response)]);
+        let client = fixture_client(base_url);
+        client
+            .create_a_record("zone-1", "www.example.com", Ipv4Addr::new(203, 0, 113, 9))
+            .unwrap();
+        let observed = handle.join().unwrap();
+        assert!(observed[0].starts_with("POST /zones/zone-1/dns_records"));
+        assert!(observed[0].contains(r#""proxied":true"#));
+        assert!(observed[0].contains(r#""ttl":1"#));
+    }
+
+    /// Verifies an update only repoints the address and never rewrites proxy state or TTL.
+    #[test]
+    fn preserves_existing_proxy_and_ttl_on_update() {
+        let response = r#"{"success":true,"errors":[],"result":{"id":"record-1","name":"www.example.com","content":"203.0.113.9","type":"A","proxied":false,"ttl":120}}"#;
         let (base_url, handle) = spawn_fixture(vec![(200, response), (200, response)]);
         let client = fixture_client(base_url);
         let ip = Ipv4Addr::new(203, 0, 113, 9);
         client
-            .create_a_record("zone-1", "www.example.com", ip)
+            .update_a_record("zone-1", &existing_record(false, 120), ip)
             .unwrap();
         client
-            .update_a_record("zone-1", "record-1", "www.example.com", ip)
+            .update_a_record("zone-1", &existing_record(true, 1), ip)
             .unwrap();
         let observed = handle.join().unwrap();
-        assert!(observed[0].starts_with("POST /zones/zone-1/dns_records"));
-        assert!(observed[1].starts_with("PUT /zones/zone-1/dns_records/record-1"));
+        assert!(observed[0].starts_with("PUT /zones/zone-1/dns_records/record-1"));
+        assert!(observed[0].contains(r#""proxied":false"#));
+        assert!(observed[0].contains(r#""ttl":120"#));
+        assert!(observed[1].contains(r#""proxied":true"#));
+        assert!(observed[1].contains(r#""ttl":1"#));
         assert!(
             observed
                 .iter()
-                .all(|request| request.contains(r#""proxied":true"#)
-                    && request.contains(r#""ttl":1"#))
+                .all(|request| request.contains(r#""content":"203.0.113.9""#)
+                    && request.contains(r#""type":"A""#))
         );
     }
 

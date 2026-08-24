@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::cloudflare::DnsProvider;
 use crate::config::RecordConfig;
-use crate::error::Result;
+use crate::error::{Result, UpdaterError};
 use crate::logging;
 use crate::tplink::WanIpProvider;
 
@@ -68,6 +68,7 @@ impl<'a, W: WanIpProvider, D: DnsProvider> Reconciler<'a, W, D> {
         let started = Instant::now();
         logging::info(format!("cycle_start records={}", self.records.len()));
         let wan_ip = self.wan_provider.read_wan_ipv4()?;
+        ensure_publishable_wan_ipv4(wan_ip)?;
         logging::info(format!("wan_ipv4={wan_ip}"));
         let mut report = CycleReport {
             wan_ip: Some(wan_ip),
@@ -131,7 +132,7 @@ impl<'a, W: WanIpProvider, D: DnsProvider> Reconciler<'a, W, D> {
             }
             Some(existing) => {
                 self.dns_provider
-                    .update_a_record(zone_id, &existing.id, &record.record_name, wan_ip)
+                    .update_a_record(zone_id, &existing, wan_ip)
                     .map_err(|error| error.to_string())?;
                 logging::info(format!(
                     "record={} action=updated from={} to={wan_ip}",
@@ -147,6 +148,43 @@ enum RecordAction {
     Unchanged,
     Created,
     Updated,
+}
+
+/// Refuses to publish a router reading that could never be reached from the public internet.
+///
+/// A TP-Link WAN interface reports `0.0.0.0` while a lease is renegotiating, and reports an
+/// RFC 1918 or RFC 6598 address when it sits behind another router or carrier-grade NAT. Writing
+/// any of those to the managed records takes every hostname offline until the next real change,
+/// so a nonsense reading fails the cycle and leaves DNS exactly as it was.
+pub fn ensure_publishable_wan_ipv4(address: Ipv4Addr) -> Result<()> {
+    let octets = address.octets();
+    let reason = if address.is_unspecified() {
+        Some("unspecified")
+    } else if address.is_loopback() {
+        Some("loopback")
+    } else if address.is_private() {
+        Some("private")
+    } else if address.is_link_local() {
+        Some("link-local")
+    } else if address.is_broadcast() {
+        Some("broadcast")
+    } else if address.is_multicast() {
+        Some("multicast")
+    } else if octets[0] == 100 && (64..128).contains(&octets[1]) {
+        Some("carrier-grade NAT")
+    } else if octets[0] == 198 && (18..20).contains(&octets[1]) {
+        Some("benchmarking")
+    } else if octets[0] >= 240 {
+        Some("reserved")
+    } else {
+        None
+    };
+    match reason {
+        None => Ok(()),
+        Some(reason) => Err(UpdaterError::Protocol(format!(
+            "TP-Link router reported a non-routable WAN address ({reason}); DNS was left unchanged"
+        ))),
+    }
 }
 
 /// Resolves each distinct zone once and caches a printable failure for dependent records.
@@ -230,13 +268,12 @@ mod tests {
         fn update_a_record(
             &self,
             _zone_id: &str,
-            _record_id: &str,
-            record_name: &str,
+            existing: &DnsRecord,
             _content: Ipv4Addr,
         ) -> Result<()> {
             self.writes
                 .borrow_mut()
-                .push(format!("update:{record_name}"));
+                .push(format!("update:{}", existing.name));
             Ok(())
         }
     }
@@ -253,6 +290,8 @@ mod tests {
                 id: "1".into(),
                 name: "a.example.com".into(),
                 content: wan_ip,
+                proxied: true,
+                ttl: 1,
             }),
         );
         dns.records.borrow_mut().insert(
@@ -261,6 +300,8 @@ mod tests {
                 id: "2".into(),
                 name: "b.example.com".into(),
                 content: Ipv4Addr::new(198, 51, 100, 2),
+                proxied: false,
+                ttl: 120,
             }),
         );
         let records = vec![
@@ -282,6 +323,50 @@ mod tests {
             dns.writes.borrow().as_slice(),
             ["update:b.example.com", "create:other.com"]
         );
+    }
+
+    /// Verifies every address family a router can wrongly report is refused before any write.
+    #[test]
+    fn rejects_non_global_wan_addresses() {
+        let rejected = [
+            [0, 0, 0, 0],
+            [127, 0, 0, 1],
+            [10, 0, 0, 1],
+            [172, 16, 0, 1],
+            [192, 168, 0, 1],
+            [169, 254, 1, 1],
+            [100, 64, 0, 1],
+            [198, 18, 0, 1],
+            [224, 0, 0, 1],
+            [240, 0, 0, 1],
+            [255, 255, 255, 255],
+        ];
+        for octets in rejected {
+            let address = Ipv4Addr::from(octets);
+            assert!(
+                ensure_publishable_wan_ipv4(address).is_err(),
+                "{address} should have been refused"
+            );
+        }
+        for octets in [[38, 59, 218, 121], [8, 8, 8, 8], [99, 63, 255, 254]] {
+            let address = Ipv4Addr::from(octets);
+            assert!(
+                ensure_publishable_wan_ipv4(address).is_ok(),
+                "{address} should have been accepted"
+            );
+        }
+    }
+
+    /// Verifies a non-routable router reading fails the cycle without writing to any record.
+    #[test]
+    fn cycle_fails_without_writing_when_wan_is_not_global() {
+        let wan = FakeWan(Ok(Ipv4Addr::new(0, 0, 0, 0)));
+        let dns = FakeDns::default();
+        let records = vec![record("example.com", "a.example.com")];
+        let result = Reconciler::new(&wan, &dns, &records).run_cycle();
+        assert!(matches!(result, Err(UpdaterError::Protocol(_))));
+        assert!(dns.writes.borrow().is_empty());
+        assert!(dns.zone_calls.borrow().is_empty());
     }
 
     /// Creates one concise desired-record fixture.

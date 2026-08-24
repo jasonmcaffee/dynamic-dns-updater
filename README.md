@@ -2,6 +2,21 @@
 
 A small Rust daemon that reads the WAN IPv4 address from a TP-Link router and keeps the configured Cloudflare A records synchronized. It runs one reconciliation immediately, then repeats every five minutes.
 
+## Reconciliation rules
+
+- A reconciliation only ever changes a record's **address**. An existing record's `proxied` state and
+  `ttl` are read off Cloudflare and echoed back on the update, so a record that has been deliberately
+  set to DNS-only, or given a custom TTL, is never silently reverted. Only a record the daemon has to
+  **create** gets the defaults (`proxied: true`, automatic TTL).
+- A record name that resolves to more than one exact A record fails that record with a logged error
+  rather than guessing which one to update. The other records in the cycle still reconcile.
+- A WAN address the public internet could never reach — unspecified, loopback, RFC 1918 private,
+  link-local, RFC 6598 carrier-grade NAT, benchmarking, multicast, reserved or broadcast — is refused.
+  The cycle fails loudly and DNS is left exactly as it was, rather than publishing an unroutable
+  address to every managed hostname.
+- One record failing never stops the others, and a failed cycle never stops the daemon: it logs the
+  failure to stderr and tries again at the next interval.
+
 Production uses the Rust release executable and does not install runtime dependencies at service startup. The obsolete Python implementation was removed after the Rust service completed production verification.
 
 ## Configuration
@@ -50,4 +65,4 @@ On this machine, use the Service Manager at `http://localhost:4000` to start, st
 cargo test
 ```
 
-The focused suite covers configuration, TP-Link cryptography, Cloudflare HTTP contracts/retries, reconciliation decisions, zone caching, and scheduler shutdown behavior.
+The focused suite covers configuration, TP-Link cryptography, Cloudflare HTTP contracts/retries, proxy/TTL preservation on update, WAN address validation, reconciliation decisions, zone caching, and scheduler shutdown behavior.
