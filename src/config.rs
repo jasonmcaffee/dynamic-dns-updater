@@ -90,6 +90,7 @@ pub fn default_records() -> Vec<RecordConfig> {
         ("jasonmcaffee.com", "media-backend.jasonmcaffee.com"),
         ("jasonmcaffee.com", "git.jasonmcaffee.com"),
         ("jasonmcaffee.com", "phone.jasonmcaffee.com"),
+        ("jasonmcaffee.com", "taxes.jasonmcaffee.com"),
         ("yogajhana.com", "yogajhana.com"),
         ("chordical.com", "chordical.com"),
         ("chordical.com", "www.chordical.com"),
@@ -187,7 +188,7 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 10);
+        assert_eq!(config.records.len(), 11);
         assert_eq!(
             config.records.last().unwrap().record_name,
             "api.chordical.com"
