@@ -95,6 +95,11 @@ pub fn default_records() -> Vec<RecordConfig> {
         ("chordical.com", "chordical.com"),
         ("chordical.com", "www.chordical.com"),
         ("chordical.com", "api.chordical.com"),
+        // task-1799. This zone held no records at all when these two were added, so the first cycle
+        // takes the create path — which is the one that applies the `proxied: true` default, and the
+        // site is behind Cloudflare exactly like every other name here.
+        ("blackrainbowlabs.com", "blackrainbowlabs.com"),
+        ("blackrainbowlabs.com", "www.blackrainbowlabs.com"),
     ]
     .into_iter()
     .map(|(zone_name, record_name)| RecordConfig {
@@ -188,10 +193,20 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 11);
+        assert_eq!(config.records.len(), 13);
         assert_eq!(
             config.records.last().unwrap().record_name,
-            "api.chordical.com"
+            "www.blackrainbowlabs.com"
+        );
+        let black_rainbow: Vec<&str> = config
+            .records
+            .iter()
+            .filter(|record| record.zone_name == "blackrainbowlabs.com")
+            .map(|record| record.record_name.as_str())
+            .collect();
+        assert_eq!(
+            black_rainbow,
+            vec!["blackrainbowlabs.com", "www.blackrainbowlabs.com"]
         );
     }
 
