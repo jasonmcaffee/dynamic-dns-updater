@@ -100,6 +100,11 @@ pub fn default_records() -> Vec<RecordConfig> {
         // site is behind Cloudflare exactly like every other name here.
         ("blackrainbowlabs.com", "blackrainbowlabs.com"),
         ("blackrainbowlabs.com", "www.blackrainbowlabs.com"),
+        // task-1806. Unluminous, the product site. This zone also held no records when these two were
+        // added, so the first cycle takes the create path — which is the one that applies the
+        // `proxied: true` default, and the site is behind Cloudflare exactly like every other name here.
+        ("unluminous.com", "unluminous.com"),
+        ("unluminous.com", "www.unluminous.com"),
     ]
     .into_iter()
     .map(|(zone_name, record_name)| RecordConfig {
@@ -193,10 +198,10 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 13);
+        assert_eq!(config.records.len(), 15);
         assert_eq!(
             config.records.last().unwrap().record_name,
-            "www.blackrainbowlabs.com"
+            "www.unluminous.com"
         );
         let black_rainbow: Vec<&str> = config
             .records
@@ -208,6 +213,13 @@ mod tests {
             black_rainbow,
             vec!["blackrainbowlabs.com", "www.blackrainbowlabs.com"]
         );
+        let unluminous: Vec<&str> = config
+            .records
+            .iter()
+            .filter(|record| record.zone_name == "unluminous.com")
+            .map(|record| record.record_name.as_str())
+            .collect();
+        assert_eq!(unluminous, vec!["unluminous.com", "www.unluminous.com"]);
     }
 
     /// Verifies a scoped API token takes precedence without requiring global-key fields.
