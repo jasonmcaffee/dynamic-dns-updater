@@ -91,6 +91,12 @@ pub fn default_records() -> Vec<RecordConfig> {
         ("jasonmcaffee.com", "git.jasonmcaffee.com"),
         ("jasonmcaffee.com", "phone.jasonmcaffee.com"),
         ("jasonmcaffee.com", "taxes.jasonmcaffee.com"),
+        // task-2059. The Rust agent tasks board, reached through the same proxy as the names above.
+        // It is the first name here that a person signs in to rather than one the proxy fronts
+        // without a credential, so the record being proxied matters more than usual: Cloudflare is
+        // what terminates TLS, and a sign-in over plain HTTP to the origin would put a password on
+        // the wire.
+        ("jasonmcaffee.com", "tasks.jasonmcaffee.com"),
         ("yogajhana.com", "yogajhana.com"),
         ("chordical.com", "chordical.com"),
         ("chordical.com", "www.chordical.com"),
@@ -203,11 +209,20 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 17);
+        assert_eq!(config.records.len(), 18);
         assert_eq!(
             config.records.last().unwrap().record_name,
             "www.inillucent.com"
         );
+        // task-2059. Asserted by name rather than only by the count, so a record removed and
+        // another added in the same edit cannot leave the count right and the inventory wrong.
+        let jasonmcaffee: Vec<&str> = config
+            .records
+            .iter()
+            .filter(|record| record.zone_name == "jasonmcaffee.com")
+            .map(|record| record.record_name.as_str())
+            .collect();
+        assert!(jasonmcaffee.contains(&"tasks.jasonmcaffee.com"), "{jasonmcaffee:?}");
         let black_rainbow: Vec<&str> = config
             .records
             .iter()
