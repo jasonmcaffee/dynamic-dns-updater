@@ -97,6 +97,13 @@ pub fn default_records() -> Vec<RecordConfig> {
         // what terminates TLS, and a sign-in over plain HTTP to the origin would put a password on
         // the wire.
         ("jasonmcaffee.com", "tasks.jasonmcaffee.com"),
+        // task-2195. The Bob McAffee tape archive. Its pages come from a Cloudflare Worker; its audio
+        // comes from brl-sites on this machine through the proxy, so the record has to point here.
+        ("jasonmcaffee.com", "bobmcaffee.jasonmcaffee.com"),
+        // task-2257. Scripture, a signed in study site served by scripture-server through the proxy.
+        // Like the tasks board, a person types a password into it, so the record must stay proxied
+        // and Cloudflare must be what terminates TLS.
+        ("jasonmcaffee.com", "scriptures.jasonmcaffee.com"),
         ("yogajhana.com", "yogajhana.com"),
         ("chordical.com", "chordical.com"),
         ("chordical.com", "www.chordical.com"),
@@ -209,7 +216,7 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 18);
+        assert_eq!(config.records.len(), 20);
         assert_eq!(
             config.records.last().unwrap().record_name,
             "www.inillucent.com"
@@ -223,6 +230,8 @@ mod tests {
             .map(|record| record.record_name.as_str())
             .collect();
         assert!(jasonmcaffee.contains(&"tasks.jasonmcaffee.com"), "{jasonmcaffee:?}");
+        assert!(jasonmcaffee.contains(&"bobmcaffee.jasonmcaffee.com"), "{jasonmcaffee:?}");
+        assert!(jasonmcaffee.contains(&"scriptures.jasonmcaffee.com"), "{jasonmcaffee:?}");
         let black_rainbow: Vec<&str> = config
             .records
             .iter()
