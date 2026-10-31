@@ -108,6 +108,10 @@ pub fn default_records() -> Vec<RecordConfig> {
         ("chordical.com", "chordical.com"),
         ("chordical.com", "www.chordical.com"),
         ("chordical.com", "api.chordical.com"),
+        // task-2414. Chordical Sheet Music, a static site served through the proxy from this machine.
+        // The first cycle takes the create path, which applies the `proxied: true` default, so the
+        // record is behind Cloudflare like chordical.com and Cloudflare terminates TLS for it.
+        ("chordical.com", "sheetmusic.chordical.com"),
         // task-1799. This zone held no records at all when these two were added, so the first cycle
         // takes the create path — which is the one that applies the `proxied: true` default, and the
         // site is behind Cloudflare exactly like every other name here.
@@ -216,7 +220,7 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 20);
+        assert_eq!(config.records.len(), 21);
         assert_eq!(
             config.records.last().unwrap().record_name,
             "www.inillucent.com"
@@ -232,6 +236,16 @@ mod tests {
         assert!(jasonmcaffee.contains(&"tasks.jasonmcaffee.com"), "{jasonmcaffee:?}");
         assert!(jasonmcaffee.contains(&"bobmcaffee.jasonmcaffee.com"), "{jasonmcaffee:?}");
         assert!(jasonmcaffee.contains(&"scriptures.jasonmcaffee.com"), "{jasonmcaffee:?}");
+        let chordical: Vec<&str> = config
+            .records
+            .iter()
+            .filter(|record| record.zone_name == "chordical.com")
+            .map(|record| record.record_name.as_str())
+            .collect();
+        assert_eq!(
+            chordical,
+            vec!["chordical.com", "www.chordical.com", "api.chordical.com", "sheetmusic.chordical.com"]
+        );
         let black_rainbow: Vec<&str> = config
             .records
             .iter()
