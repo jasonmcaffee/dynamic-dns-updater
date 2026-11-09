@@ -114,6 +114,7 @@ pub fn default_records() -> Vec<RecordConfig> {
         ("chordical.com", "sheetmusic.chordical.com"),
         ("chordical.com", "guitarsheetmusic.chordical.com"),
         ("chordical.com", "voicesheetmusic.chordical.com"),
+        ("chordical.com", "drumsheetmusic.chordical.com"),
         // task-1799. This zone held no records at all when these two were added, so the first cycle
         // takes the create path — which is the one that applies the `proxied: true` default, and the
         // site is behind Cloudflare exactly like every other name here.
@@ -222,7 +223,7 @@ mod tests {
         let values = valid_values();
         let config = AppConfig::from_lookup(|key| values.get(key).cloned()).unwrap();
         assert_eq!(config.interval, Duration::from_secs(300));
-        assert_eq!(config.records.len(), 23);
+        assert_eq!(config.records.len(), 24);
         assert_eq!(
             config.records.last().unwrap().record_name,
             "www.inillucent.com"
@@ -246,7 +247,7 @@ mod tests {
             .collect();
         assert_eq!(
             chordical,
-            vec!["chordical.com", "www.chordical.com", "api.chordical.com", "sheetmusic.chordical.com", "guitarsheetmusic.chordical.com", "voicesheetmusic.chordical.com"]
+            vec!["chordical.com", "www.chordical.com", "api.chordical.com", "sheetmusic.chordical.com", "guitarsheetmusic.chordical.com", "voicesheetmusic.chordical.com", "drumsheetmusic.chordical.com"]
         );
         let black_rainbow: Vec<&str> = config
             .records
